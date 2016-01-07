@@ -6,25 +6,31 @@
 package events_go;
 
 import java.awt.Color;
+import java.awt.Window;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import javax.swing.SwingUtilities;
 
 /**
  *
  * @author Sergey
  */
 public class connect_db extends javax.swing.JFrame {
-
+    
     //Data base connect
-    public String JDBC_DRIVER = "oracle.jdbc.driver.OracleDriver";
-    public String DB_URL_PART = "jdbc:oracle:thin:@";//"jdbc:oracle:thin:@localhost:1521:orcl";
-    public String DB_URL = "jdbc:oracle:thin:@localhost:1521:orclgeo";
-    public String USER = "SYSTEM";
-    public String PASS = "2476";
-    public String HOST = "localhost";
-    public String PORT = "1521"; 
-    public String DB_NAME = "orclgeo";    
+    private String JDBC_DRIVER = "oracle.jdbc.driver.OracleDriver";
+    private String DB_URL_PART = "jdbc:oracle:thin:@";
+    private String USER = "SYSTEM";
+    private String PASS = "2476";
+    private String HOST = "localhost";
+    private String PORT = "1521"; 
+    private String DB_NAME = "orclgeo"; 
+    
+    private static Connection conn = null;
     
     /**
      * Creates new form connect_db
@@ -56,7 +62,9 @@ public class connect_db extends javax.swing.JFrame {
         jTextField_dbname = new javax.swing.JTextField();
         jLabel_status = new javax.swing.JLabel();
 
-        setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
+        setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
+        setTitle("Connection settings");
+        setAlwaysOnTop(true);
 
         jButton_test.setText("Test");
         jButton_test.addActionListener(new java.awt.event.ActionListener() {
@@ -66,6 +74,11 @@ public class connect_db extends javax.swing.JFrame {
         });
 
         jButton_ok.setText("OK");
+        jButton_ok.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jButton_okActionPerformed(evt);
+            }
+        });
 
         jTextField_login.setText("SYSTEM");
 
@@ -154,23 +167,53 @@ public class connect_db extends javax.swing.JFrame {
 
         pack();
     }// </editor-fold>//GEN-END:initComponents
-
+    
     //Test button
     private void jButton_testActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton_testActionPerformed
-        DB_URL = DB_URL_PART+HOST+":"+PORT+":"+DB_NAME;
-        try { 
-            Connection conn = DriverManager.getConnection(DB_URL,USER,PASS);
+        
+        String url = getURL();
+        try {
+            conn = DriverManager.getConnection(url,USER,PASS);
             jLabel_status.setForeground(Color.green);
             jLabel_status.setText("Status: OK");
-            System.out.printf("Connect ok");
+            System.out.printf("Connect ok");  
+            conn.close();
         } catch (SQLException ex) {
             jLabel_status.setForeground(Color.red);
             jLabel_status.setText("Status: Fall");
-            System.out.printf("Connect fall");
-        }
+            System.out.printf("Connect fall");  
+        }   
         
     }//GEN-LAST:event_jButton_testActionPerformed
 
+    //Ok button
+    private void jButton_okActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton_okActionPerformed
+        setVisible(false);
+    }//GEN-LAST:event_jButton_okActionPerformed
+        
+    public String getDriver() {
+        return JDBC_DRIVER;
+    }
+    
+    public String getURL() {
+        HOST = jTextField_host.getText();
+        PORT = jTextField_port.getText();
+        DB_NAME = jTextField_dbname.getText();
+        USER = jTextField_login.getText();
+        PASS = jTextField_password.getText();
+        
+        String DB_URL = DB_URL_PART+HOST+":"+PORT+":"+DB_NAME;
+        return DB_URL;
+    }
+    
+    public String getLogin() {
+        return USER;
+    }
+
+    public String getPassword() {
+        return PASS;
+    }
+        
     /**
      * @param args the command line arguments
      */
