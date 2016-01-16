@@ -5,7 +5,15 @@
  */
 package events_go;
 
+import java.awt.BasicStroke;
 import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Polygon;
+import java.awt.event.MouseEvent;
+import java.io.IOException;
+import static java.lang.Math.cos;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -14,10 +22,16 @@ import java.sql.Statement;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.swing.table.DefaultTableModel;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.select.Elements;
+import org.openstreetmap.gui.jmapviewer.DefaultMapController;
 import org.openstreetmap.gui.jmapviewer.JMapViewer;
 import org.openstreetmap.gui.jmapviewer.MapMarkerDot;
+import org.openstreetmap.gui.jmapviewer.MapPolygonImpl;
 import org.openstreetmap.gui.jmapviewer.OsmTileLoader;
 import org.openstreetmap.gui.jmapviewer.interfaces.ICoordinate;
+import org.openstreetmap.gui.jmapviewer.interfaces.MapPolygon;
 import org.openstreetmap.gui.jmapviewer.tilesources.OsmTileSource;
 
 /**
@@ -27,6 +41,16 @@ import org.openstreetmap.gui.jmapviewer.tilesources.OsmTileSource;
 public class mainMap extends javax.swing.JFrame {
 
     JMapViewer map;
+    
+    private static final String URL         = "https://maps.googleapis.com/maps/api/geocode/xml";
+    private static final String DEFAULT_KEY = "AIzaSyBTvVs2Lcn_Ul9NjmSDFlxw3CbYhInszxI"; 
+    
+    class coordinateClass { 
+        double lat;
+        double lon;
+    }
+    
+    coordinateClass searchCoord = new coordinateClass();
     
     private String driver_db;
     private String url_db;
@@ -66,7 +90,7 @@ public class mainMap extends javax.swing.JFrame {
         showTileGrid.setSelected(map.isTileGridVisible());
     }
     
-    private void LoadPoints(String ID_event) {
+    private void LoadPointsEvent(String ID_event) {
          try {
             
             int counter = 0;
@@ -105,6 +129,171 @@ public class mainMap extends javax.swing.JFrame {
         }       
     }
     
+    private void LoadPointsPlace(String ID_place) {
+         try {
+            
+            int counter = 0;
+            float lon = 0;
+            float lat = 0;
+
+            map.removeAllMapMarkers();
+        
+            Connection db_connect = DriverManager.getConnection(url_db,login_db,pass_db);
+            Statement stmt = db_connect.createStatement(); //Create statment
+            String query_str = "Select DISTINCT (go.id_object), SDO_GEOM.SDO_CENTROID(go.shape, m.diminfo).sdo_point.x as LAT, SDO_GEOM.SDO_CENTROID(go.shape, m.diminfo).sdo_point.y as LON\n" +
+                                " FROM user_sdo_geom_metadata m, geo_object go\n" +
+                                " INNER JOIN geo_place_object po on po.id_object = go.id_object\n" +
+                                " WHERE po.id_place = "+ID_place; //Create query
+            
+            ResultSet query_result = stmt.executeQuery(query_str); //Get result
+            
+            while(query_result.next()){
+                lat = query_result.getFloat("LON");
+                lon = query_result.getFloat("LAT");
+                
+                map.addMapMarker(new MapMarkerDot(lat,lon));
+                
+                counter++;
+            }
+            
+            
+            
+            setMapCenter(lat, lon, 17);
+                                
+            db_connect.close();
+            stmt.close();
+            query_result.close();
+            
+        } catch (SQLException ex) {
+            Logger.getLogger(load_shape.class.getName()).log(Level.SEVERE, null, ex);
+        }       
+    }
+    
+    private void LoadPointsObject(String ID_object) {
+         try {
+            
+            int counter = 0;
+            float lon = 0;
+            float lat = 0;
+
+            map.removeAllMapMarkers();
+        
+            Connection db_connect = DriverManager.getConnection(url_db,login_db,pass_db);
+            Statement stmt = db_connect.createStatement(); //Create statment
+            String query_str = "Select DISTINCT (go.id_object), SDO_GEOM.SDO_CENTROID(go.shape, m.diminfo).sdo_point.x as LAT, SDO_GEOM.SDO_CENTROID(go.shape, m.diminfo).sdo_point.y as LON\n" +
+                                " FROM user_sdo_geom_metadata m, geo_object go\n" +
+                                " WHERE go.id_object = "+ID_object; //Create query
+            
+            ResultSet query_result = stmt.executeQuery(query_str); //Get result
+            
+            while(query_result.next()){
+                lat = query_result.getFloat("LON");
+                lon = query_result.getFloat("LAT");
+                
+                map.addMapMarker(new MapMarkerDot(lat,lon));
+                
+                counter++;
+            }
+            
+            setMapCenter(lat, lon, 17);
+                                
+            db_connect.close();
+            stmt.close();
+            query_result.close();
+            
+        } catch (SQLException ex) {
+            Logger.getLogger(load_shape.class.getName()).log(Level.SEVERE, null, ex);
+        }       
+    }
+    
+    private void setMapCenter(double lat, double lon, int zoom) {
+        ICoordinate center = map.getPosition();
+        center.setLat(lat);
+        center.setLon(lon);
+        map.setDisplayPosition(center, zoom);
+    }
+        
+    private void LoadPointsPersone(String ID_persone) {
+         try {
+            
+            int counter = 0;
+            coordinateClass coord = new coordinateClass();
+
+            map.removeAllMapMarkers();
+        
+            Connection db_connect = DriverManager.getConnection(url_db,login_db,pass_db);
+            Statement stmt = db_connect.createStatement(); //Create statment
+            String query_str = "Select *" +
+                                " FROM GEO_PERSONE" +
+                                " WHERE id_persone = " + ID_persone; //Create query
+            
+            ResultSet query_result = stmt.executeQuery(query_str); //Get result
+            
+            while(query_result.next()){
+                String address = query_result.getString("ADDRESS");           
+                coord = getCoordinate(address);
+                map.addMapMarker(new MapMarkerDot(coord.lat,coord.lon));
+                setMapCenter(coord.lat,coord.lon, 17);
+                counter++;
+            }
+                        
+            db_connect.close();
+            stmt.close();
+            query_result.close();
+            
+        } catch (SQLException ex) {
+            Logger.getLogger(load_shape.class.getName()).log(Level.SEVERE, null, ex);
+        }       
+    }
+        
+    private String getAddress(coordinateClass coord) {
+        String address = "";
+        try {
+            String url = (URL + "?latlng=" + String.valueOf(coord.lat)+","+ String.valueOf(coord.lon) + "&key=" + DEFAULT_KEY);
+            
+            Document doc = Jsoup
+                    .connect(url)
+                    .userAgent("Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.154 Safari/537.36")
+                    .timeout(20000)
+                    .get();
+            
+            Elements links = doc.select("formatted_address");     
+            
+            address = links.get(0).text();
+
+        } catch (IOException ex) {
+            Logger.getLogger(personeClass.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        return address;
+    }
+    
+    private coordinateClass getCoordinate(String addres_str) {
+        coordinateClass coord = new coordinateClass();
+        
+        try {
+            String url = (URL + "?address=" + addres_str + "&key=" + DEFAULT_KEY);
+            
+            Document doc = Jsoup
+                    .connect(url)
+                    .userAgent("Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.154 Safari/537.36")
+                    .timeout(20000)
+                    .get();
+            
+            Elements links_lat = doc.select("location lat");
+            Elements links_lon = doc.select("location lng");
+            
+            coord.lat = Float.parseFloat(links_lat.get(0).text());
+            coord.lon = Double.parseDouble(links_lon.get(0).text());
+            
+            return coord;
+        } catch (IOException ex) {
+            Logger.getLogger(personeClass.class.getName()).log(Level.SEVERE, null, ex);
+            coord.lat = 51.8311104;
+            coord.lon = 12.2429261;   
+            return coord;
+        }
+    }
+    
     private void Load_events() {
          try {
             
@@ -139,13 +328,6 @@ public class mainMap extends javax.swing.JFrame {
         } catch (SQLException ex) {
             Logger.getLogger(load_shape.class.getName()).log(Level.SEVERE, null, ex);
         }
-    }
-    
-    private void setMapCenter(float lat, float lon, int zoom) {
-        ICoordinate center = map.getPosition();
-        center.setLat(lat);
-        center.setLon(lon);
-        map.setDisplayPosition(center, zoom);
     }
     
     private void LoadPlace(String ID_event) {
@@ -218,7 +400,7 @@ public class mainMap extends javax.swing.JFrame {
         }
     }
     
-    public void LoadObjects(String ID, int format) {
+    public void LoadObjectsPlace(String ID_place) {
         try {
             
             int counter = 0;
@@ -232,7 +414,7 @@ public class mainMap extends javax.swing.JFrame {
                             +" FROM user_sdo_geom_metadata m, GEO_OBJECT BM" 
                             +" INNER JOIN GEO_PLACE_OBJECT PB ON BM.ID_OBJECT = PB.ID_OBJECT"
                             +" INNER JOIN GEO_PLACE PL ON  PB.ID_PLACE = PL.ID_PLACE"
-                            +" WHERE (m.table_name = 'GEO_BUILD_MAP' AND m.column_name = 'SHAPE') and (PL.ID_PLACE='" + tableModelPlace.getValueAt(row_n, 0) + "')"; //Create query
+                            +" WHERE (m.table_name = 'GEO_BUILD_MAP' AND m.column_name = 'SHAPE') and (PL.ID_PLACE='" + ID_place + "')"; //Create query
             
             ResultSet query_result = stmt.executeQuery(query_str); //Get result
             
@@ -244,6 +426,7 @@ public class mainMap extends javax.swing.JFrame {
                 String lon = String.valueOf(query_result.getFloat("LON"));
                 String area = String.valueOf(query_result.getFloat("AREA"));
                 String[] row = {ID,name,type,lat,lon,area};
+                
                 tableModelObject.addRow(row);
                 counter++;
             }
@@ -286,10 +469,8 @@ public class mainMap extends javax.swing.JFrame {
         jLabel2 = new javax.swing.JLabel();
         jButton_radius = new javax.swing.JButton();
         jTextField_radius = new javax.swing.JTextField();
-        jLabel3 = new javax.swing.JLabel();
-        jTextField_near = new javax.swing.JTextField();
-        jButton_near = new javax.swing.JButton();
-        jLabel_instruction = new javax.swing.JLabel();
+        jLabel7 = new javax.swing.JLabel();
+        jLabel_coord = new javax.swing.JLabel();
         jPanel4 = new javax.swing.JPanel();
         jScrollPane1 = new javax.swing.JScrollPane();
         jTable_events = new javax.swing.JTable();
@@ -309,7 +490,7 @@ public class mainMap extends javax.swing.JFrame {
         jButton_zoom_minus = new javax.swing.JButton();
         jButton_zoom_reset = new javax.swing.JButton();
 
-        setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
+        setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
         addWindowListener(new java.awt.event.WindowAdapter() {
             public void windowOpened(java.awt.event.WindowEvent evt) {
                 formWindowOpened(evt);
@@ -322,7 +503,7 @@ public class mainMap extends javax.swing.JFrame {
         jPanel_map.setLayout(jPanel_mapLayout);
         jPanel_mapLayout.setHorizontalGroup(
             jPanel_mapLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGap(0, 483, Short.MAX_VALUE)
+            .addGap(0, 0, Short.MAX_VALUE)
         );
         jPanel_mapLayout.setVerticalGroup(
             jPanel_mapLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -340,21 +521,27 @@ public class mainMap extends javax.swing.JFrame {
             }
         });
 
-        jLabel1.setText("By address:");
+        jLabel1.setText("Search address:");
 
-        jLabel2.setText("Search events in Radius");
+        jLabel2.setText("Search events in R:");
 
         jButton_radius.setText("Search");
+        jButton_radius.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jButton_radiusActionPerformed(evt);
+            }
+        });
 
         jTextField_radius.setText("300");
+        jTextField_radius.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jTextField_radiusActionPerformed(evt);
+            }
+        });
 
-        jLabel3.setText("Search near events");
+        jLabel7.setText("Coord:");
 
-        jTextField_near.setText("2");
-
-        jButton_near.setText("Search");
-
-        jLabel_instruction.setText("Instructions:");
+        jLabel_coord.setText("lat: 0 lon: 0");
 
         javax.swing.GroupLayout jPanel3Layout = new javax.swing.GroupLayout(jPanel3);
         jPanel3.setLayout(jPanel3Layout);
@@ -363,27 +550,22 @@ public class mainMap extends javax.swing.JFrame {
             .addGroup(jPanel3Layout.createSequentialGroup()
                 .addContainerGap()
                 .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addComponent(jLabel1)
+                    .addComponent(jLabel2))
+                .addGap(6, 6, 6)
+                .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                     .addGroup(jPanel3Layout.createSequentialGroup()
-                        .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addComponent(jLabel1)
-                            .addComponent(jLabel2))
-                        .addGap(6, 6, 6)
-                        .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addGroup(jPanel3Layout.createSequentialGroup()
-                                .addComponent(jTextField_radius, javax.swing.GroupLayout.PREFERRED_SIZE, 44, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addGap(4, 4, 4)
-                                .addComponent(jButton_radius, javax.swing.GroupLayout.PREFERRED_SIZE, 71, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
-                                .addComponent(jLabel3)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
-                                .addComponent(jTextField_near, javax.swing.GroupLayout.PREFERRED_SIZE, 31, javax.swing.GroupLayout.PREFERRED_SIZE))
-                            .addComponent(jTextField_address))
+                        .addComponent(jTextField_address, javax.swing.GroupLayout.PREFERRED_SIZE, 264, javax.swing.GroupLayout.PREFERRED_SIZE)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
-                        .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
-                            .addComponent(jButton_near, javax.swing.GroupLayout.DEFAULT_SIZE, 84, Short.MAX_VALUE)
-                            .addComponent(jButton_address, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)))
+                        .addComponent(jButton_address, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
                     .addGroup(jPanel3Layout.createSequentialGroup()
-                        .addComponent(jLabel_instruction)
+                        .addComponent(jTextField_radius, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(jButton_radius)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                        .addComponent(jLabel7)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                        .addComponent(jLabel_coord, javax.swing.GroupLayout.PREFERRED_SIZE, 234, javax.swing.GroupLayout.PREFERRED_SIZE)
                         .addGap(0, 0, Short.MAX_VALUE)))
                 .addContainerGap())
         );
@@ -399,12 +581,9 @@ public class mainMap extends javax.swing.JFrame {
                     .addComponent(jLabel2)
                     .addComponent(jButton_radius)
                     .addComponent(jTextField_radius, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(jLabel3)
-                    .addComponent(jTextField_near, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(jButton_near))
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jLabel_instruction)
-                .addGap(9, 9, 9))
+                    .addComponent(jLabel7)
+                    .addComponent(jLabel_coord))
+                .addContainerGap())
         );
 
         jPanel4.setBorder(javax.swing.BorderFactory.createTitledBorder("Information"));
@@ -492,7 +671,7 @@ public class mainMap extends javax.swing.JFrame {
         jPanel4Layout.setHorizontalGroup(
             jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addComponent(jScrollPane2)
-            .addComponent(jScrollPane3, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.PREFERRED_SIZE, 0, Short.MAX_VALUE)
+            .addComponent(jScrollPane3, javax.swing.GroupLayout.Alignment.TRAILING)
             .addComponent(jScrollPane1, javax.swing.GroupLayout.Alignment.TRAILING)
             .addGroup(jPanel4Layout.createSequentialGroup()
                 .addGroup(jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -500,7 +679,7 @@ public class mainMap extends javax.swing.JFrame {
                     .addComponent(jLabel5)
                     .addComponent(jLabel6))
                 .addGap(0, 0, Short.MAX_VALUE))
-            .addComponent(jScrollPane4, javax.swing.GroupLayout.PREFERRED_SIZE, 0, Short.MAX_VALUE)
+            .addComponent(jScrollPane4)
         );
         jPanel4Layout.setVerticalGroup(
             jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -553,11 +732,26 @@ public class mainMap extends javax.swing.JFrame {
 
         jButton_zoom_plus.setText("Zoom +");
         jButton_zoom_plus.setMaximumSize(new java.awt.Dimension(69, 20));
+        jButton_zoom_plus.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jButton_zoom_plusActionPerformed(evt);
+            }
+        });
 
         jButton_zoom_minus.setText("Zoom -");
         jButton_zoom_minus.setMaximumSize(new java.awt.Dimension(69, 20));
+        jButton_zoom_minus.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jButton_zoom_minusActionPerformed(evt);
+            }
+        });
 
         jButton_zoom_reset.setText("Zoom reset");
+        jButton_zoom_reset.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jButton_zoom_resetActionPerformed(evt);
+            }
+        });
 
         javax.swing.GroupLayout jPanel2Layout = new javax.swing.GroupLayout(jPanel2);
         jPanel2.setLayout(jPanel2Layout);
@@ -618,7 +812,14 @@ public class mainMap extends javax.swing.JFrame {
     }//GEN-LAST:event_showTileGridActionPerformed
 
     private void jButton_addressActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton_addressActionPerformed
-
+        coordinateClass coord = new coordinateClass();
+        if (!"".equals(jTextField_address.getText())) {
+            coord = getCoordinate(jTextField_address.getText());
+            searchCoord = coord;
+            setMapCenter(coord.lat, coord.lon, map.getZoom());
+            setMapPoint(coord);
+            jLabel_coord.setText("lat: "+String.valueOf(coord.lat)+"  lon: "+String.valueOf(coord.lon));
+        }
     }//GEN-LAST:event_jButton_addressActionPerformed
 
     private void formWindowOpened(java.awt.event.WindowEvent evt) {//GEN-FIRST:event_formWindowOpened
@@ -629,32 +830,147 @@ public class mainMap extends javax.swing.JFrame {
         Load_events();
         if (jTable_events.getRowCount() > 0) {
             jTable_events.setRowSelectionInterval(0, 0);
-            LoadPoints(jTable_events.getValueAt(jTable_events.getSelectedRow(), 0).toString());
-            LoadObjects(jTable_events.getValueAt(jTable_events.getSelectedRow(),0).toString());
             LoadPlace(jTable_events.getValueAt(jTable_events.getSelectedRow(),0).toString());
+            if (jTable_places.getRowCount() > 0) {
+                jTable_places.setRowSelectionInterval(0, 0);
+                LoadObjectsPlace(jTable_places.getValueAt(jTable_places.getSelectedRow(),0).toString());
+                LoadPointsEvent(jTable_events.getValueAt(jTable_events.getSelectedRow(), 0).toString());
+            }
             LoadPerson(jTable_events.getValueAt(jTable_events.getSelectedRow(),0).toString());
+            if (jTable_persones.getRowCount() > 0) {
+                jTable_persones.setRowSelectionInterval(0, 0);
+            } 
         }
+        
+         new DefaultMapController(map){
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                coordinateClass coord = new coordinateClass();
+                coord.lat = map.getPosition(e.getPoint()).getLat();
+                coord.lon = map.getPosition(e.getPoint()).getLon();
+                searchCoord = coord;
+                jLabel_coord.setText("lat: "+String.valueOf(coord.lat)+"  lon: "+String.valueOf(coord.lon));
+                jTextField_address.setText(getAddress(coord));
+                System.out.println(map.getPosition(e.getPoint()));
+            }
+        };
+         
     }//GEN-LAST:event_formWindowOpened
 
     private void jTable_eventsMouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_jTable_eventsMouseClicked
-        LoadPoints(jTable_events.getValueAt(jTable_events.getSelectedRow(), 0).toString());
-        LoadObjects(jTable_events.getValueAt(jTable_events.getSelectedRow(),0).toString());
+        LoadPointsEvent(jTable_events.getValueAt(jTable_events.getSelectedRow(), 0).toString());
         LoadPlace(jTable_events.getValueAt(jTable_events.getSelectedRow(),0).toString());
         LoadPerson(jTable_events.getValueAt(jTable_events.getSelectedRow(),0).toString());
+        if (jTable_places.getRowCount() > 0) {
+            jTable_places.setRowSelectionInterval(0, 0);
+            LoadObjectsPlace(jTable_places.getValueAt(jTable_places.getSelectedRow(),0).toString());
+            LoadPointsEvent(jTable_events.getValueAt(jTable_events.getSelectedRow(), 0).toString());
+        }
     }//GEN-LAST:event_jTable_eventsMouseClicked
 
     private void jTable_personesMouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_jTable_personesMouseClicked
-        // TODO add your handling code here:
+        LoadPointsPersone(jTable_persones.getValueAt(jTable_persones.getSelectedRow(),0).toString());
     }//GEN-LAST:event_jTable_personesMouseClicked
 
     private void jTable_placesMouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_jTable_placesMouseClicked
-        // TODO add your handling code here:
+        LoadPointsPlace(jTable_places.getValueAt(jTable_places.getSelectedRow(),0).toString());
+        if (jTable_places.getRowCount() > 0) {
+            LoadObjectsPlace(jTable_places.getValueAt(jTable_places.getSelectedRow(),0).toString());
+            LoadPointsPlace(jTable_places.getValueAt(jTable_places.getSelectedRow(),0).toString());
+        }
     }//GEN-LAST:event_jTable_placesMouseClicked
 
     private void jTable_objectsMouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_jTable_objectsMouseClicked
-        // TODO add your handling code here:
+        LoadPointsObject(jTable_objects.getValueAt(jTable_objects.getSelectedRow(),0).toString());
     }//GEN-LAST:event_jTable_objectsMouseClicked
 
+    private void jButton_radiusActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton_radiusActionPerformed
+        try {
+            
+            int counter = 0;
+            String radius = jTextField_radius.getText();
+            double delta = convert_coord(Float.valueOf(radius));
+            String lat = String.valueOf(searchCoord.lat);
+            String lon = String.valueOf(searchCoord.lon);
+            
+            tableModelEvent.setRowCount(0);
+            
+            Connection db_connect = DriverManager.getConnection(url_db,login_db,pass_db);
+            Statement stmt = db_connect.createStatement(); //Create statment
+
+            //Builds
+            String query_str = "SELECT DISTINCT (ev.id_event), EV.ID_EVENT, EV.NAME, EV.START_DATATIME, EV.END_DATATIME, EV.COST, ET.NAME as TYPE_NAME\n" +
+                                "FROM user_sdo_geom_metadata m, geo_event ev\n" +
+                                "INNER JOIN geo_place_event pe on pe.id_event = ev.id_event\n" +
+                                "INNER JOIN geo_place_object po on po.id_place = pe.id_place\n" +
+                                "INNER JOIN geo_object ob on ob.id_object = po.id_object\n" +
+                                "INNER JOIN GEO_EVENT_TYPE ET ON EV.ID_TYPE = ET.ID_TYPE\n" +
+                                "WHERE SDO_GEOM.WITHIN_DISTANCE(ob.shape, m.diminfo, "+String.valueOf(delta)+",\n" +
+                                "     (\n" +
+                                "	 mdsys.sdo_geometry(2001,\n" +
+                                "		NULL,\n" +
+                                "		mdsys.sdo_point_type("+lon+","+lat+",0),\n" +
+                                "		NULL,\n" +
+                                "		NULL)\n" +
+                                "	 )\n" +
+                                "	 , m.diminfo) = 'TRUE'"; //Create query
+            
+            ResultSet query_result = stmt.executeQuery(query_str); //Get result
+            
+            while(query_result.next()){
+                String ID = String.valueOf(query_result.getInt("ID_EVENT"));
+                String name = query_result.getString("NAME");
+                String start_data = query_result.getTimestamp("START_DATATIME").toString();
+                String end_data = query_result.getTimestamp("END_DATATIME").toString();
+                String cost = String.valueOf(query_result.getFloat("COST")).replace('.', ',');
+                String name_type = query_result.getString("TYPE_NAME");
+                String[] row = {ID,name,start_data,end_data,cost,name_type};
+                tableModelEvent.addRow(row);
+                counter++;
+            }
+            
+            setMapPoint(searchCoord);
+                                
+            db_connect.close();
+            stmt.close();
+            query_result.close();
+            
+        } catch (SQLException ex) {
+            Logger.getLogger(load_shape.class.getName()).log(Level.SEVERE, null, ex);
+        }
+    }//GEN-LAST:event_jButton_radiusActionPerformed
+
+    private void jTextField_radiusActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jTextField_radiusActionPerformed
+        // TODO add your handling code here:
+    }//GEN-LAST:event_jTextField_radiusActionPerformed
+
+    private void jButton_zoom_resetActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton_zoom_resetActionPerformed
+        setMapCenter(searchCoord.lat, searchCoord.lon, 17);
+    }//GEN-LAST:event_jButton_zoom_resetActionPerformed
+
+    private void jButton_zoom_plusActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton_zoom_plusActionPerformed
+        if (map.getZoom() < 19) {
+            map.setZoom(map.getZoom()+1);
+        }
+    }//GEN-LAST:event_jButton_zoom_plusActionPerformed
+
+    private void jButton_zoom_minusActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton_zoom_minusActionPerformed
+        if (map.getZoom() > 2) {
+            map.setZoom(map.getZoom()-1);
+        }
+    }//GEN-LAST:event_jButton_zoom_minusActionPerformed
+            
+    private double convert_coord(float radius) {
+	float rlat = 0;
+	float m = (float) (111132.09  - 566.05 * cos(2 * rlat) + 1.2 * cos(4 * rlat));
+	float dlat = radius / m;
+	return dlat;
+    }
+    
+    private void setMapPoint(coordinateClass coord) {
+        map.removeAllMapMarkers();
+        map.addMapMarker(new MapMarkerDot(coord.lat, coord.lon));
+    }
     /**
      * @param args the command line arguments
      */
@@ -692,18 +1008,17 @@ public class mainMap extends javax.swing.JFrame {
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JButton jButton_address;
-    private javax.swing.JButton jButton_near;
     private javax.swing.JButton jButton_radius;
     private javax.swing.JButton jButton_zoom_minus;
     private javax.swing.JButton jButton_zoom_plus;
     private javax.swing.JButton jButton_zoom_reset;
     private javax.swing.JLabel jLabel1;
     private javax.swing.JLabel jLabel2;
-    private javax.swing.JLabel jLabel3;
     private javax.swing.JLabel jLabel4;
     private javax.swing.JLabel jLabel5;
     private javax.swing.JLabel jLabel6;
-    private javax.swing.JLabel jLabel_instruction;
+    private javax.swing.JLabel jLabel7;
+    private javax.swing.JLabel jLabel_coord;
     private javax.swing.JPanel jPanel1;
     private javax.swing.JPanel jPanel2;
     private javax.swing.JPanel jPanel3;
@@ -718,7 +1033,6 @@ public class mainMap extends javax.swing.JFrame {
     private javax.swing.JTable jTable_persones;
     private javax.swing.JTable jTable_places;
     private javax.swing.JTextField jTextField_address;
-    private javax.swing.JTextField jTextField_near;
     private javax.swing.JTextField jTextField_radius;
     private javax.swing.JCheckBox showTileGrid;
     private javax.swing.JCheckBox showZoomControls;

@@ -118,6 +118,7 @@ public class PlacesWindow extends javax.swing.JFrame {
                 String lon = String.valueOf(query_result.getFloat("LON"));
                 String area = String.valueOf(query_result.getFloat("AREA"));
                 String[] row = {ID,name,type,lat,lon,area};
+                
                 tableModelObject.addRow(row);
                 counter++;
             }
